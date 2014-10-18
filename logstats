@@ -1,0 +1,124 @@
+cat > /tmp/logstats.$$
+
+grep "20..-..-.."  /tmp/logstats.$$ > /tmp/logspan.$$
+
+firstDate=`head -1 /tmp/logspan.$$ | cut -f1 -d" " | tr -d '[[]]'`
+firstTime=`head -1 /tmp/logspan.$$ | cut -f2 -d" " | sed -e 's/\].*//g'`
+lastDate=`tail -1 /tmp/logspan.$$ | cut -f1 -d" " | tr -d '[[]]'`
+lastTime=`tail -1 /tmp/logspan.$$ | cut -f2 -d" " | sed -e 's/\].*//g'`
+
+first="$firstDate $firstTime"
+last="$lastDate $lastTime"
+
+#first=`head -1 /tmp/logspan.$$ | cut -f1 -d"]" | cut -f2 -d"["`
+echo "First timestamp: $first"
+#last=`tail -1 /tmp/logspan.$$ | cut -f1 -d"]" | cut -f2 -d"["`
+echo "Last timestamp: $last"
+firstSeconds=`date -d "$first" +%s`
+lastSeconds=`date -d "$last" +%s`
+
+# if by some weird arrangement, the log has newest items at the top and oldest at the bottom
+# then we need to get an unsigned time difference
+timeDiffSeconds=`bc <<< "$lastSeconds-$firstSeconds" | sed -e 's/-//g'`
+echo "Time difference (seconds): $timeDiffSeconds"
+
+timeDiffHMS=`date -u -d @${timeDiffSeconds} +"%T"`
+echo "Time difference (H:M:S): $timeDiffHMS"
+
+# generic counts
+
+s=2
+
+numLines=`wc -l /tmp/logstats.$$ | cut -f1 -d" "`
+echo "lines: $numLines"
+
+numLinesPerSecond=`bc <<< "scale=$s;$numLines/$timeDiffSeconds"`
+echo "lines per second: $numLinesPerSecond"
+
+longestLine=`wc -L /tmp/logstats.$$ | cut -f1 -d" "`
+echo "longest line: $longestLine"
+
+echo
+
+numFatal=`egrep -ce "\[FATAL" /tmp/logstats.$$`
+p=`bc <<< "scale=$s;$numFatal/$numLines"`
+q=`bc <<< "$p*100"`
+echo "FATAL: $numFatal (${q}% of total)"
+
+numError=`egrep -ce "\[ERROR" /tmp/logstats.$$`
+p=`bc <<< "scale=$s;($numError/$numLines)*100"`
+echo "ERROR: $numError (${p}% of total)"
+
+numWarn=`egrep -ce "\[WARN" /tmp/logstats.$$`
+p=`bc <<< "scale=$s;($numWarn/$numLines)*100"`
+echo "WARN: $numWarn (${p}% of total)"
+
+numInfo=`egrep -ce "\[INFO" /tmp/logstats.$$`
+p=`bc <<< "scale=$s;($numInfo/$numLines)*100"`
+echo "INFO: $numInfo (${p}% of total)"
+
+numDebug=`egrep -ce "\[DEBUG" /tmp/logstats.$$`
+p=`bc <<< "scale=$s;($numDebug/$numLines)*100"`
+echo "DEBUG: $numDebug (${p}% of total)"
+
+numTrace=`egrep -ce "\[TRACE" /tmp/logstats.$$`
+p=`bc <<< "scale=$s;($numTrace/$numLines)*100"`
+echo "TRACE: $numTrace (${p}% of total)"
+
+# sites specific counts
+
+echo
+
+numInvalidParam=`egrep -ce "INVALID PARAM" /tmp/logstats.$$`
+if [ $numInvalidParam -gt 0 ]; then
+        p=`bc <<< "scale=$s;($numInvalidParam/$numLines)*100"`
+        echo "INVALID PARAM: $numInvalidParam (${p}% of total)"
+        echo Top 20 INVALID PARAM:
+        grep "INVALID PARAM:" /tmp/logstats.$$ | sed -e 's/.*INVALID PARAM://g' | sort | uniq -c | sort -rn | head -20
+        echo
+fi
+
+
+numExceptionIncludingResource=`egrep -ce "Exception including resource" /tmp/logstats.$$`
+if [ $numExceptionIncludingResource -gt 0 ]; then
+                p=`bc <<< "scale=$s;($numExceptionIncludingResource/$numLines)*100"`
+        echo "Exception including resource: $numExceptionIncludingResource (${p}% of total)"
+        echo Top 20 Exception including resource:
+        grep "Exception including resource" /tmp/logstats.$$ | sed -e 's/.*Exception including resource//g' | sort | uniq -c | sort -rn | head -20
+        echo
+fi
+
+
+numORA=`egrep -ce "ORA-[0-9]*" /tmp/logstats.$$`
+if [ $numORA -gt 0 ]; then
+        p=`bc <<< "scale=$s;($numORA/$numLines)*100"`
+        echo "ORA codes: $numORA (${p}% of total)"
+        echo Top 20 ORA codes:
+        grep "ORA-[0-9]*" /tmp/logstats.$$ | sed -e 's/.*ORA-/ORA-/g' | sort | uniq -c | sort -rn | head -20
+        echo
+fi
+
+
+grep Exception /tmp/logstats.$$ | sed -e 's/\([A-Za-z.]*Exception\).*/__start__\1__end__/g' | sed -e 's/.*__start__//g' | sed -e 's/__end__.*//g' | grep '\.' > /tmp/logexceptions.$$
+numExceptions=`wc -l /tmp/logexceptions.$$ | cut -f1 -d" "`
+if [ $numORA -gt 0 ]; then
+        p=`bc <<< "scale=$s;($numExceptions/$numLines)*100"`
+        echo "Exceptions: $numExceptions (${p}% of total)"
+        echo Top 20 Exceptions:
+        sort /tmp/logexceptions.$$ | uniq -c | sort -rn
+        echo
+fi
+
+numElementNotFound=`egrep -ce "Element not found" /tmp/logstats.$$`
+if [ $numElementNotFound -gt 0 ]; then
+        p=`bc <<< "scale=$s;($numElementNotFound/$numLines)*100"`
+        echo "Element not found: $numElementNotFound (${p}% of total)"
+        echo Top 20 Element not found:
+        grep "Element not found" /tmp/logstats.$$ | sed -e 's/.*Element not found //g' | sort | cut -f1 -d" " | uniq -c | sort -rn | head -20
+fi
+
+# cleanup
+
+rm -f /tmp/logstats.$$
+rm -f /tmp/logspan.$$
+rm -f /tmp/logexceptions.$$
