@@ -119,8 +119,8 @@ fi
 
 echo "RealTime Publishes"
 grep 'Starting RealTime publish session' /tmp/logstats.$$ | sed -s 's/.*Starting RealTime publish session //g' | sort | uniq > /tmp/logpubsessions.$$
-echo "Found `wc -l /tmp/logpubsessions.$$`; pubsessions"
-for i in `cat /tmp/logpubsessions.$$`; do echo "pubsession $i"; grep "RealTime publish session $i" /tmp/logstats.$$ | pgfirstlast ; grep "RealTime publish session $i" /tmp/logstats.$$; echo; done
+echo "Found `wc -l /tmp/logpubsessions.$$ | cut -f1 -d' '`; pubsessions"
+for i in `cat /tmp/logpubsessions.$$`; do echo "pubsession $i"; grep "RealTime publish session $i" /tmp/logstats.$$ | pgfirstlast | grep difference; grep "RealTime publish session $i" /tmp/logstats.$$; echo; done
  
 # cleanup
 
