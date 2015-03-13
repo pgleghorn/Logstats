@@ -11,8 +11,7 @@ fi
 echo cwd: `pwd`
 echo filename: $filename
 
-grep "201.-..-.." /tmp/logstats.$$ > /tmp/logspan.$$
-source pgfirstlast < /tmp/logspan.$$
+source pgfirstlast < /tmp/logstats.$$
 # source, because $timeDiffSeconds is created in pgfirstlast, but i want to use it later
 
 # generic counts
