@@ -1,0 +1,30 @@
+#!/bin/sh
+
+if [ $# -eq 0 ]; then
+	cat > /tmp/pgfirstlast.$$
+else
+	cp $1 /tmp/pgfirstlast.$$
+fi
+
+firstDate=`head -1 /tmp/pgfirstlast.$$ | cut -f1 -d" " | tr -d '[[]]'`
+firstTime=`head -1 /tmp/pgfirstlast.$$ | cut -f2 -d" " | sed -e 's/\].*//g'`
+lastDate=`tail -1 /tmp/pgfirstlast.$$ | cut -f1 -d" " | tr -d '[[]]'`
+lastTime=`tail -1 /tmp/pgfirstlast.$$ | cut -f2 -d" " | sed -e 's/\].*//g'`
+
+first="$firstDate $firstTime"
+last="$lastDate $lastTime"
+
+echo "First timestamp: $first"
+echo "Last timestamp: $last"
+firstSeconds=`date -d "$first" +%s`
+lastSeconds=`date -d "$last" +%s`
+
+# if by some weird arrangement, the log has newest items at the top and oldest at the bottom
+# then we need to get an unsigned time difference
+export timeDiffSeconds=`bc <<< "$lastSeconds-$firstSeconds" | sed -e 's/-//g'`
+timeDiffHMS=`date -u -d @${timeDiffSeconds} +"%T"`
+echo "Time difference: $timeDiffSeconds seconds ($timeDiffHMS)"
+
+# cleanup
+
+rm -f /tmp/pgfirstlast.$$

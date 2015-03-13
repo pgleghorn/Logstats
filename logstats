@@ -1,39 +1,28 @@
-cat > /tmp/logstats.$$
+#!/bin/sh
 
-grep "20..-..-.."  /tmp/logstats.$$ > /tmp/logspan.$$
+if [ $# -eq 0 ]; then
+	cat > /tmp/logstats.$$
+	filename="not provided, stdin"
+else
+	cp $1 /tmp/logstats.$$
+	filename=$1
+fi
 
-firstDate=`head -1 /tmp/logspan.$$ | cut -f1 -d" " | tr -d '[[]]'`
-firstTime=`head -1 /tmp/logspan.$$ | cut -f2 -d" " | sed -e 's/\].*//g'`
-lastDate=`tail -1 /tmp/logspan.$$ | cut -f1 -d" " | tr -d '[[]]'`
-lastTime=`tail -1 /tmp/logspan.$$ | cut -f2 -d" " | sed -e 's/\].*//g'`
+echo cwd: `pwd`
+echo filename: $filename
 
-first="$firstDate $firstTime"
-last="$lastDate $lastTime"
-
-#first=`head -1 /tmp/logspan.$$ | cut -f1 -d"]" | cut -f2 -d"["`
-echo "First timestamp: $first"
-#last=`tail -1 /tmp/logspan.$$ | cut -f1 -d"]" | cut -f2 -d"["`
-echo "Last timestamp: $last"
-firstSeconds=`date -d "$first" +%s`
-lastSeconds=`date -d "$last" +%s`
-
-# if by some weird arrangement, the log has newest items at the top and oldest at the bottom
-# then we need to get an unsigned time difference
-timeDiffSeconds=`bc <<< "$lastSeconds-$firstSeconds" | sed -e 's/-//g'`
-echo "Time difference (seconds): $timeDiffSeconds"
-
-timeDiffHMS=`date -u -d @${timeDiffSeconds} +"%T"`
-echo "Time difference (H:M:S): $timeDiffHMS"
+grep "201.-..-.." /tmp/logstats.$$ > /tmp/logspan.$$
+source pgfirstlast < /tmp/logspan.$$
+# source, because $timeDiffSeconds is created in pgfirstlast, but i want to use it later
 
 # generic counts
 
 s=2
 
 numLines=`wc -l /tmp/logstats.$$ | cut -f1 -d" "`
-echo "lines: $numLines"
-
+echo timeDiffSeconds is $timeDiffSeconds
 numLinesPerSecond=`bc <<< "scale=$s;$numLines/$timeDiffSeconds"`
-echo "lines per second: $numLinesPerSecond"
+echo "lines: $numLines ($numLinesPerSecond lines per second)"
 
 longestLine=`wc -L /tmp/logstats.$$ | cut -f1 -d" "`
 echo "longest line: $longestLine"
@@ -71,54 +60,71 @@ echo
 
 numInvalidParam=`egrep -ce "INVALID PARAM" /tmp/logstats.$$`
 if [ $numInvalidParam -gt 0 ]; then
-        p=`bc <<< "scale=$s;($numInvalidParam/$numLines)*100"`
-        echo "INVALID PARAM: $numInvalidParam (${p}% of total)"
-        echo Top 20 INVALID PARAM:
-        grep "INVALID PARAM:" /tmp/logstats.$$ | sed -e 's/.*INVALID PARAM://g' | sort | uniq -c | sort -rn | head -20
-        echo
+	p=`bc <<< "scale=$s;($numInvalidParam/$numLines)*100"`
+	echo "INVALID PARAM: $numInvalidParam (${p}% of total)"
+	echo Top 20 INVALID PARAM:
+	grep "INVALID PARAM:" /tmp/logstats.$$ | sed -e 's/.*INVALID PARAM://g' | sort | uniq -c | sort -rn | head -20
+	echo
 fi
 
 
 numExceptionIncludingResource=`egrep -ce "Exception including resource" /tmp/logstats.$$`
 if [ $numExceptionIncludingResource -gt 0 ]; then
-                p=`bc <<< "scale=$s;($numExceptionIncludingResource/$numLines)*100"`
-        echo "Exception including resource: $numExceptionIncludingResource (${p}% of total)"
-        echo Top 20 Exception including resource:
-        grep "Exception including resource" /tmp/logstats.$$ | sed -e 's/.*Exception including resource//g' | sort | uniq -c | sort -rn | head -20
-        echo
+		p=`bc <<< "scale=$s;($numExceptionIncludingResource/$numLines)*100"`
+	echo "Exception including resource: $numExceptionIncludingResource (${p}% of total)"
+	echo Top 20 Exception including resource:
+	grep "Exception including resource" /tmp/logstats.$$ | sed -e 's/.*Exception including resource//g' | sort | uniq -c | sort -rn | head -20
+	echo
 fi
 
 
 numORA=`egrep -ce "ORA-[0-9]*" /tmp/logstats.$$`
 if [ $numORA -gt 0 ]; then
-        p=`bc <<< "scale=$s;($numORA/$numLines)*100"`
-        echo "ORA codes: $numORA (${p}% of total)"
-        echo Top 20 ORA codes:
-        grep "ORA-[0-9]*" /tmp/logstats.$$ | sed -e 's/.*ORA-/ORA-/g' | sort | uniq -c | sort -rn | head -20
-        echo
+	p=`bc <<< "scale=$s;($numORA/$numLines)*100"`
+	echo "ORA codes: $numORA (${p}% of total)"
+	echo Top 20 ORA codes:
+	grep "ORA-[0-9]*" /tmp/logstats.$$ | sed -e 's/.*ORA-/ORA-/g' | sort | uniq -c | sort -rn | head -20
+	echo
 fi
 
 
 grep Exception /tmp/logstats.$$ | sed -e 's/\([A-Za-z.]*Exception\).*/__start__\1__end__/g' | sed -e 's/.*__start__//g' | sed -e 's/__end__.*//g' | grep '\.' > /tmp/logexceptions.$$
 numExceptions=`wc -l /tmp/logexceptions.$$ | cut -f1 -d" "`
-if [ $numORA -gt 0 ]; then
-        p=`bc <<< "scale=$s;($numExceptions/$numLines)*100"`
-        echo "Exceptions: $numExceptions (${p}% of total)"
-        echo Top 20 Exceptions:
-        sort /tmp/logexceptions.$$ | uniq -c | sort -rn
-        echo
+if [ $numExceptions -gt 0 ]; then
+	p=`bc <<< "scale=$s;($numExceptions/$numLines)*100"`
+	echo "Exceptions: $numExceptions (${p}% of total)"
+	echo Top 20 Exceptions:
+	sort /tmp/logexceptions.$$ | uniq -c | sort -rn | head -20
+	echo
+fi
+
+
+grep Exception /tmp/logstats.$$ | undate | unid | sort > /tmp/logexceptionsDetail.$$
+numExceptionsDetail=`wc -l /tmp/logexceptionsDetail.$$ | cut -f1 -d" "`
+if [ $numExceptionsDetail -gt 0 ]; then
+	p=`bc <<< "scale=$s;($numExceptionsDetail/$numLines)*100"`
+	echo "Exceptions (detail): $numExceptionsDetail (${p}% of total)"
+	echo "Top 20 Exceptions (detail):"
+	sort /tmp/logexceptionsDetail.$$ | uniq -c | sort -rn | head -20
+	echo
 fi
 
 numElementNotFound=`egrep -ce "Element not found" /tmp/logstats.$$`
 if [ $numElementNotFound -gt 0 ]; then
-        p=`bc <<< "scale=$s;($numElementNotFound/$numLines)*100"`
-        echo "Element not found: $numElementNotFound (${p}% of total)"
-        echo Top 20 Element not found:
-        grep "Element not found" /tmp/logstats.$$ | sed -e 's/.*Element not found //g' | sort | cut -f1 -d" " | uniq -c | sort -rn | head -20
+	p=`bc <<< "scale=$s;($numElementNotFound/$numLines)*100"`
+	echo "Element not found: $numElementNotFound (${p}% of total)"
+	echo Top 20 Element not found:
+	grep "Element not found" /tmp/logstats.$$ | sed -e 's/.*Element not found //g' | sort | cut -f1 -d" " | uniq -c | sort -rn | head -20
 fi
 
+echo "RealTime Publishes"
+grep 'Starting RealTime publish session' /tmp/logstats.$$ | sed -s 's/.*Starting RealTime publish session //g' | sort | uniq > /tmp/logpubsessions.$$
+echo "Found `wc -l /tmp/logpubsessions.$$`; pubsessions"
+for i in `cat /tmp/logpubsessions.$$`; do echo "pubsession $i"; grep "RealTime publish session $i" /tmp/logstats.$$ | pgfirstlast ; grep "RealTime publish session $i" /tmp/logstats.$$; echo; done
+ 
 # cleanup
 
 rm -f /tmp/logstats.$$
 rm -f /tmp/logspan.$$
 rm -f /tmp/logexceptions.$$
+rm -f /tmp/logpubsessions.$$

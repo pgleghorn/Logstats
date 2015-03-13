@@ -1,13 +1,17 @@
 Logstats
 ========
 
-A small shell script to read in futuretense.txt / sites.log and output some useful info such as line count, longest line, start/end date, distribution of log levels, and highlight frequency/top20 of some common errors such as ORA-x codes, invalid param, exception including resource, element not found.
+A small shell script to read in futuretense.txt / sites.log and output some useful info such as line count, longest line, start/end date, distribution of log levels, and highlight frequency/top20 of some common errors such as ORA-x codes, invalid param, exception including resource, element not found, pubsessions and publish speed
 
 Not massively robust, if the logger format has been tweaked then it will have trouble parsing it.
 
 Usage:
 
 logstats.sh < sites.log
+or
+logstats sites.log
+or
+cat sites.log | logstats
 
 Example output:
 
